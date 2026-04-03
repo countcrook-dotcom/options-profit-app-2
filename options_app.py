@@ -9,9 +9,9 @@ from scipy.stats import norm
 
 st.set_page_config(page_title="Options Profit + Trends App", layout="wide")
 st.title("🚀 Options Profit Calculator + Inception Trends + Barchart-Style Chain")
-st.markdown("**100% Free • No API key • Click any option to analyze instantly**")
+st.markdown("**100% Free • Click any option → instant charts • Date now stays selected**")
 
-# ==================== SIDEBAR (manual entry fallback) ====================
+# ==================== SIDEBAR (manual fallback) ====================
 with st.sidebar:
     st.header("Manual Option Entry")
     underlying = st.text_input("Underlying Ticker", value="AAPL").strip().upper()
@@ -24,9 +24,9 @@ with st.sidebar:
     current_price = st.number_input("Current Underlying Price (optional)", value=225.0, step=0.01)
     analyze_btn = st.button("🔥 Analyze Manually", type="primary")
 
-# ==================== BARCHART-STYLE CHAIN (main flow) ====================
+# ==================== BARCHART-STYLE CHAIN ====================
 with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
-    st.subheader("Load chain → click any option → get charts instantly")
+    st.subheader("Load chain → pick option → get full analysis")
     
     chain_underlying = st.text_input("Underlying Ticker", value=underlying, key="chain_underlying")
     
@@ -56,7 +56,7 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                 df_chain = df_chain.sort_values(by=["Type", "Strike"])
                 
                 st.session_state.df_chain = df_chain
-                st.session_state.selected_exp = selected_exp_str
+                st.session_state.selected_exp_str = selected_exp_str
                 st.session_state.current_stock_price = current_stock_price
                 st.success(f"✅ Loaded {len(df_chain)} contracts")
 
@@ -76,23 +76,31 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                 }
             )
             
-            # Click-to-analyze
-            option_list = [f"{row['Type']} ${row['Strike']:.2f} (Last ${row['Last']:.2f})" for _, row in df_chain.iterrows()]
+            # Safe option list for dropdown
+            option_list = []
+            for _, row in df_chain.iterrows():
+                last_str = f"${row['Last']:.2f}" if pd.notna(row['Last']) else "N/A"
+                option_list.append(f"{row['Type']} ${row['Strike']:.2f} (Last {last_str})")
+            
             selected_option_str = st.selectbox("👉 Select option to analyze", option_list, key="selected_option_key")
             
             if st.button("🚀 Load P/L + Historical Charts for this option"):
-                # Parse selection
-                type_part, rest = selected_option_str.split(" $")
-                strike_part = rest.split(" (Last")[0]
-                selected_type = type_part
-                selected_strike = float(strike_part)
+                # Bullet-proof parsing
+                try:
+                    type_part = selected_option_str.split(" $")[0]
+                    strike_part = selected_option_str.split(" $")[1].split(" (Last")[0]
+                    selected_type = type_part
+                    selected_strike = float(strike_part)
+                except:
+                    st.error("Could not parse the selected option. Please try again.")
+                    st.stop()
                 
-                # Get IV and Last price from chain
+                # Get premium and IV from chain
                 row = df_chain[(df_chain['Type'] == selected_type) & (df_chain['Strike'] == selected_strike)].iloc[0]
+                premium = row['Last'] if pd.notna(row['Last']) else 0.0
                 iv = row['IV %'] / 100 if pd.notna(row['IV %']) else 0.30
-                premium = row['Last'] if pd.notna(row['Last']) else premium
                 
-                st.success(f"✅ Analyzing {selected_type} ${selected_strike:.2f} exp {st.session_state.selected_exp}")
+                st.success(f"✅ Analyzing {selected_type} ${selected_strike:.2f} exp {st.session_state.selected_exp_str}")
                 
                 # ===================== PROFIT CALCULATOR =====================
                 def profit_at_price(price):
@@ -133,14 +141,14 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                     sigma = iv
                     d2 = (np.log(S / K) - 0.5 * sigma**2 * T) / (sigma * np.sqrt(T))
                     pop = norm.cdf(d2) * 100 if selected_type == "CALL" else norm.cdf(-d2) * 100
-                st.metric("📊 Estimated Probability of Profit", f"{pop:.1f}%", help="Probability the option finishes in-the-money beyond breakeven (based on IV)")
+                st.metric("📊 Estimated Probability of Profit", f"{pop:.1f}%", help="Based on current IV and time to expiration")
                 
                 # Historical trends from inception
-                opt_symbol = f"{chain_underlying}{selected_exp_str.replace('-','')[2:]}{selected_type[0]}{int(selected_strike*1000):08d}"
+                opt_symbol = f"{chain_underlying}{st.session_state.selected_exp_str.replace('-','')[2:]}{selected_type[0]}{int(selected_strike*1000):08d}"
                 opt = yf.Ticker(opt_symbol)
                 hist = opt.history(period="max")
                 if not hist.empty:
-                    st.subheader(f"📈 Historical Trends – {opt_symbol} (from inception)")
+                    st.subheader(f"📈 Historical Trends – {opt_symbol} (from first trade day)")
                     st.caption(f"First traded: **{hist.index[0].date()}** | {len(hist)} trading days")
                     fig_hist = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3],
                                              subplot_titles=("Option Premium Price", "Daily Volume"))
@@ -149,4 +157,4 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                     fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
                     st.plotly_chart(fig_hist, use_container_width=True)
 
-st.caption("Built with ❤️ using yfinance • Click any option in the chain above to analyze instantly")
+st.caption("✅ Date now stays selected • Click any option in the chain • Built with yfinance")
