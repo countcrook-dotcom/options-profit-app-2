@@ -7,8 +7,8 @@ from datetime import datetime
 from polygon import RESTClient
 
 st.set_page_config(page_title="Options Profit + Trends App", layout="wide")
-st.title("🚀 Options Profit Calculator + Inception Trends + Barchart-Style Chain")
-st.markdown("**Real-time Polygon data • Exact option • History from day 1 • Rich live chain**")
+st.title("🚀 Options Profit Calculator + Inception Trends + Chain Browser")
+st.markdown("**Free-tier friendly • Full history from day 1 • Barchart-style chain (live data needs paid plan)**")
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
@@ -29,51 +29,31 @@ with st.sidebar:
 if api_key:
     client = RESTClient(api_key=api_key)
 
-    # ==================== BARCHART-STYLE OPTIONS CHAIN ====================
-    with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
-        st.subheader("Load full live chain for any expiration")
-        st.caption("Exactly like the Barchart page you linked — Last, Bid, Ask, Vol, OI, IV")
+    # ==================== SAFE CHAIN BROWSER (works on FREE tier) ====================
+    with st.expander("🔍 Options Chain Browser (Barchart-style)", expanded=True):
+        st.subheader("Load full options chain")
+        st.caption("Free tier = Strike + Ticker • Upgrade for live Bid/Ask/IV")
 
         chain_underlying = st.text_input("Underlying Ticker", value=underlying, key="chain_und")
         chain_expiration = st.date_input("Expiration Date", value=expiration, key="chain_exp")
 
-        if st.button("📊 Load Rich Options Chain"):
-            with st.spinner("Fetching live chain snapshot from Polygon..."):
+        if st.button("📊 Load Options Chain"):
+            with st.spinner("Fetching chain..."):
                 try:
-                    # ✅ CORRECT METHOD: list_snapshot_options_chain
-                    chain = list(client.list_snapshot_options_chain(
-                        underlying_asset=chain_underlying.strip().upper(),
-                        params={
-                            "expiration_date": chain_expiration.strftime("%Y-%m-%d")
-                        }
+                    contracts = list(client.list_options_contracts(
+                        underlying_ticker=chain_underlying.strip().upper(),
+                        expiration_date=chain_expiration.strftime("%Y-%m-%d"),
+                        limit=1000
                     ))
 
-                    if not chain:
-                        st.warning("No options found for this expiration.")
+                    if not contracts:
+                        st.warning("No options found.")
                     else:
-                        data = []
-                        for opt in chain:
-                            last = getattr(getattr(opt, 'last_trade', None), 'price', None)
-                            bid = getattr(getattr(opt, 'last_quote', None), 'bid_price', None)
-                            ask = getattr(getattr(opt, 'last_quote', None), 'ask_price', None)
-                            volume = getattr(getattr(opt, 'day', None), 'volume', None) if hasattr(opt, 'day') else None
-                            oi = getattr(opt, 'open_interest', None)
-                            iv = getattr(opt, 'implied_volatility', None)
-
-                            # Determine Call/Put from ticker (Polygon format)
-                            option_type = "CALL" if "C" in opt.ticker.split(":")[-1] else "PUT"
-
-                            data.append({
-                                "Type": option_type,
-                                "Strike": float(opt.strike_price),
-                                "Last": round(last, 2) if last is not None else None,
-                                "Bid": round(bid, 2) if bid is not None else None,
-                                "Ask": round(ask, 2) if ask is not None else None,
-                                "Volume": int(volume) if volume is not None else None,
-                                "Open Interest": int(oi) if oi is not None else None,
-                                "IV %": round(iv * 100, 2) if iv is not None else None,
-                                "Ticker": opt.ticker,
-                            })
+                        data = [{
+                            "Type": c.contract_type.upper(),
+                            "Strike": float(c.strike_price),
+                            "Ticker": c.ticker,
+                        } for c in contracts]
 
                         df_chain = pd.DataFrame(data)
                         df_chain = df_chain.sort_values(by=["Type", "Strike"])
@@ -81,25 +61,19 @@ if api_key:
                         st.dataframe(
                             df_chain,
                             use_container_width=True,
-                            height=650,
-                            column_config={
-                                "Last": st.column_config.NumberColumn(format="$%.2f"),
-                                "Bid": st.column_config.NumberColumn(format="$%.2f"),
-                                "Ask": st.column_config.NumberColumn(format="$%.2f"),
-                                "Volume": st.column_config.NumberColumn(format="%d"),
-                                "Open Interest": st.column_config.NumberColumn(format="%d"),
-                                "IV %": st.column_config.NumberColumn(format="%.2f"),
-                            }
+                            height=600,
+                            column_config={"Strike": st.column_config.NumberColumn(format="%.2f")}
                         )
 
-                        st.success(f"✅ Loaded {len(df_chain)} live contracts")
-                        st.info("**How to use:** Copy any **Ticker** (or Strike + Type) → paste into the sidebar → click **Analyze This Option**")
+                        st.success(f"✅ Loaded {len(df_chain)} contracts (free tier)")
+                        st.info("**How to use:** Copy the **Ticker** (or Strike + Type) → paste into sidebar → click Analyze")
+
+                        st.caption("💡 Want live Bid/Ask/Last/IV like the Barchart page? Upgrade to **Options Starter** ($29/mo) at https://massive.com/pricing")
 
                 except Exception as e:
                     st.error(f"Chain error: {e}")
-                    st.info("Tip: Make sure your Polygon key has Options access (free tier is fine).")
 
-    # ==================== MAIN ANALYSIS (P/L + Historical Trends) ====================
+    # ==================== MAIN ANALYSIS (P/L + Full History) ====================
     if analyze_btn:
         with st.spinner("Finding exact option and fetching data..."):
             try:
@@ -168,24 +142,19 @@ if api_key:
                     inception = df['date'].iloc[0]
                     st.caption(f"First traded: **{inception}** | {len(df)} trading days")
 
-                    fig_hist = make_subplots(
-                        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3],
-                        subplot_titles=("Option Premium Price", "Volume & Trade Count"),
-                        specs=[[{"secondary_y": False}], [{"secondary_y": True}]]
-                    )
+                    fig_hist = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3],
+                                             subplot_titles=("Option Premium Price", "Volume & Trade Count"),
+                                             specs=[[{"secondary_y": False}], [{"secondary_y": True}]])
                     fig_hist.add_trace(go.Scatter(x=df['date'], y=df['close'], name="Close Price", line=dict(color="blue")), row=1, col=1)
                     fig_hist.add_trace(go.Bar(x=df['date'], y=df['volume'], name="Daily Volume", marker_color="orange", opacity=0.7), row=2, col=1)
                     fig_hist.add_trace(go.Scatter(x=df['date'], y=df['trades'], name="Daily Trades", line=dict(color="purple")), row=2, col=1, secondary_y=True)
                     fig_hist.update_layout(height=600, title_text=f"{ticker} — Full History Since Inception")
-                    fig_hist.update_yaxes(title_text="Price ($)", row=1, col=1)
-                    fig_hist.update_yaxes(title_text="Volume", row=2, col=1)
-                    fig_hist.update_yaxes(title_text="Trades", secondary_y=True, row=2, col=1)
                     st.plotly_chart(fig_hist, use_container_width=True)
 
             except Exception as e:
                 st.error(f"Analysis error: {e}")
 
 else:
-    st.info("👈 Enter your Polygon API key in the sidebar to unlock the chain and analysis.")
+    st.info("👈 Enter your Polygon API key in the sidebar to unlock the app.")
 
-st.caption("Built with ❤️ • Now using official list_snapshot_options_chain • Barchart-style live data")
+st.caption("Free tier fully working • Upgrade for live chain data → https://massive.com/pricing")
