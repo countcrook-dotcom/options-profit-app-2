@@ -110,10 +110,15 @@ if analyze_btn and api_key:
                 inception = df['date'].iloc[0]
                 st.caption(f"First traded: **{inception}** | {len(df)} trading days")
                 
-                # Historical Charts
-                fig_hist = make_subplots(rows=2, cols=1, shared_xaxes=True, 
-                                       vertical_spacing=0.08, row_heights=[0.7, 0.3],
-                                       subplot_titles=("Option Premium Price", "Volume & Trade Count"))
+                # Historical Charts (FIXED subplot error)
+                fig_hist = make_subplots(
+                    rows=2, cols=1, 
+                    shared_xaxes=True, 
+                    vertical_spacing=0.08, 
+                    row_heights=[0.7, 0.3],
+                    subplot_titles=("Option Premium Price", "Volume & Trade Count"),
+                    specs=[[{"secondary_y": False}], [{"secondary_y": True}]]
+                )
                 
                 fig_hist.add_trace(go.Scatter(x=df['date'], y=df['close'], name="Close Price", line=dict(color="blue")), row=1, col=1)
                 fig_hist.add_trace(go.Bar(x=df['date'], y=df['volume'], name="Daily Volume", marker_color="orange", opacity=0.7), row=2, col=1)
@@ -130,10 +135,10 @@ if analyze_btn and api_key:
         
         except Exception as e:
             st.error(f"Error: {e}")
-            st.info("Tip: Make sure your Polygon API key has access to Options data.")
+            st.info("Tip: Make sure your Polygon API key is correct and has Options data access.")
 
 else:
     st.info("👈 Fill in the details on the left and click **Analyze This Option**")
-    st.caption("Need a Polygon key? Get it free at polygon.io")
+    st.caption("Need a Polygon key? Get it free at massive.com/dashboard/keys")
 
-st.caption("Built with ❤️ using Streamlit + Polygon.io • You can deploy this for free on Streamlit Cloud")
+st.caption("Built with ❤️ using Streamlit + Polygon.io (now Massive) • Deployed on Streamlit Cloud")
