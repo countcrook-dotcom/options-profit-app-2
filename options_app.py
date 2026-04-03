@@ -8,7 +8,7 @@ from polygon import RESTClient
 
 st.set_page_config(page_title="Options Profit + Trends App", layout="wide")
 st.title("🚀 Options Profit Calculator + Inception Trends + Barchart-Style Chain")
-st.markdown("**Real-time Polygon data • Exact option • History from day 1 • Rich chain like Barchart**")
+st.markdown("**Real-time Polygon data • Exact option • History from day 1 • Rich live chain**")
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
@@ -29,10 +29,10 @@ with st.sidebar:
 if api_key:
     client = RESTClient(api_key=api_key)
 
-    # ==================== RICH OPTIONS CHAIN (Barchart-style) ====================
-    with st.expander("🔍 Barchart-Style Options Chain Browser", expanded=True):
+    # ==================== BARCHART-STYLE OPTIONS CHAIN ====================
+    with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
         st.subheader("Load full live chain for any expiration")
-        st.caption("Just like the Barchart page you linked — Last, Bid, Ask, Vol, OI, IV")
+        st.caption("Exactly like the Barchart page you linked — Last, Bid, Ask, Vol, OI, IV")
 
         chain_underlying = st.text_input("Underlying Ticker", value=underlying, key="chain_und")
         chain_expiration = st.date_input("Expiration Date", value=expiration, key="chain_exp")
@@ -40,29 +40,31 @@ if api_key:
         if st.button("📊 Load Rich Options Chain"):
             with st.spinner("Fetching live chain snapshot from Polygon..."):
                 try:
-                    # Perfect endpoint: Option Chain Snapshot (one call, full live data)
-                    snapshot = client.get_snapshot_options(
+                    # ✅ CORRECT METHOD: list_snapshot_options_chain
+                    chain = list(client.list_snapshot_options_chain(
                         underlying_asset=chain_underlying.strip().upper(),
-                        expiration_date=chain_expiration.strftime("%Y-%m-%d"),
-                        limit=1000
-                    )
+                        params={
+                            "expiration_date": chain_expiration.strftime("%Y-%m-%d")
+                        }
+                    ))
 
-                    results = snapshot.results if hasattr(snapshot, "results") else snapshot
-
-                    if not results:
+                    if not chain:
                         st.warning("No options found for this expiration.")
                     else:
                         data = []
-                        for opt in results:
+                        for opt in chain:
                             last = getattr(getattr(opt, 'last_trade', None), 'price', None)
                             bid = getattr(getattr(opt, 'last_quote', None), 'bid_price', None)
                             ask = getattr(getattr(opt, 'last_quote', None), 'ask_price', None)
-                            volume = getattr(getattr(opt, 'day', None), 'volume', None)
+                            volume = getattr(getattr(opt, 'day', None), 'volume', None) if hasattr(opt, 'day') else None
                             oi = getattr(opt, 'open_interest', None)
                             iv = getattr(opt, 'implied_volatility', None)
 
+                            # Determine Call/Put from ticker (Polygon format)
+                            option_type = "CALL" if "C" in opt.ticker.split(":")[-1] else "PUT"
+
                             data.append({
-                                "Type": opt.contract_type.upper(),
+                                "Type": option_type,
                                 "Strike": float(opt.strike_price),
                                 "Last": round(last, 2) if last is not None else None,
                                 "Bid": round(bid, 2) if bid is not None else None,
@@ -76,35 +78,29 @@ if api_key:
                         df_chain = pd.DataFrame(data)
                         df_chain = df_chain.sort_values(by=["Type", "Strike"])
 
-                        # Nice formatting
                         st.dataframe(
                             df_chain,
                             use_container_width=True,
-                            height=600,
+                            height=650,
                             column_config={
                                 "Last": st.column_config.NumberColumn(format="$%.2f"),
                                 "Bid": st.column_config.NumberColumn(format="$%.2f"),
                                 "Ask": st.column_config.NumberColumn(format="$%.2f"),
                                 "Volume": st.column_config.NumberColumn(format="%d"),
                                 "Open Interest": st.column_config.NumberColumn(format="%d"),
+                                "IV %": st.column_config.NumberColumn(format="%.2f"),
                             }
                         )
 
-                        st.success(f"✅ Loaded {len(df_chain)} contracts (live data)")
-
-                        st.info("**How to use:**\n"
-                                "1. Scroll or search the table\n"
-                                "2. Copy the **Ticker** (or Strike + Type)\n"
-                                "3. Paste into the sidebar above\n"
-                                "4. Click **Analyze This Option** for P/L + full history")
+                        st.success(f"✅ Loaded {len(df_chain)} live contracts")
+                        st.info("**How to use:** Copy any **Ticker** (or Strike + Type) → paste into the sidebar → click **Analyze This Option**")
 
                 except Exception as e:
-                    st.error(f"Chain snapshot error: {e}")
-                    st.info("Tip: Free tier works great — make sure your key has Options access.")
+                    st.error(f"Chain error: {e}")
+                    st.info("Tip: Make sure your Polygon key has Options access (free tier is fine).")
 
-    # ==================== MAIN ANALYSIS ====================
+    # ==================== MAIN ANALYSIS (P/L + Historical Trends) ====================
     if analyze_btn:
-        # (Your original full analysis code stays exactly the same — P/L graph + historical trends)
         with st.spinner("Finding exact option and fetching data..."):
             try:
                 option_contracts = list(client.list_options_contracts(
@@ -123,7 +119,7 @@ if api_key:
                 ticker = option.ticker
                 st.success(f"✅ Found: **{ticker}**")
 
-                # Profit calculator (unchanged)
+                # Profit calculator
                 def profit_at_price(price):
                     if opt_type == "CALL":
                         return max(0, price - strike) - premium
@@ -139,7 +135,7 @@ if api_key:
                 col3.metric("Max Profit", "Unlimited ↑" if opt_type == "CALL" else f"${(strike - premium)*100*contracts:,.0f}")
                 col4.metric("Shares", f"{contracts * 100}")
 
-                # P/L graph (unchanged)
+                # P/L graph
                 prices = np.linspace(max(0, current_price * 0.4), current_price * 1.8, 200)
                 profits = [profit_at_price(p) * 100 * contracts for p in prices]
                 fig_pl = go.Figure()
@@ -151,28 +147,45 @@ if api_key:
                 fig_pl.update_layout(title="Profit/Loss at Expiration", xaxis_title="Stock Price at Expiration", yaxis_title="Total P/L ($)", height=400)
                 st.plotly_chart(fig_pl, use_container_width=True)
 
-                # Historical trends (unchanged)
-                st.subheader(f"📈 Historical Trends – {ticker} (from first trade)")
-                aggs = list(client.get_aggs(ticker=ticker, multiplier=1, timespan="day", from_="2000-01-01", to=datetime.now().strftime("%Y-%m-%d"), limit=50000))
+                # Historical trends from inception
+                st.subheader(f"📈 Historical Trends – {ticker} (from first trade day)")
+                aggs = list(client.get_aggs(
+                    ticker=ticker,
+                    multiplier=1,
+                    timespan="day",
+                    from_="2000-01-01",
+                    to=datetime.now().strftime("%Y-%m-%d"),
+                    limit=50000
+                ))
                 if aggs:
-                    df = pd.DataFrame([{'date': pd.to_datetime(a.timestamp, unit='ms').date(), 'close': a.close, 'volume': a.volume, 'trades': getattr(a, 'transactions', 0)} for a in aggs])
+                    df = pd.DataFrame([{
+                        'date': pd.to_datetime(a.timestamp, unit='ms').date(),
+                        'close': a.close,
+                        'volume': a.volume,
+                        'trades': getattr(a, 'transactions', 0)
+                    } for a in aggs])
                     df = df.sort_values('date')
                     inception = df['date'].iloc[0]
-                    st.caption(f"First traded: **{inception}**")
+                    st.caption(f"First traded: **{inception}** | {len(df)} trading days")
 
-                    fig_hist = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3],
-                                             subplot_titles=("Option Premium Price", "Volume & Trade Count"),
-                                             specs=[[{"secondary_y": False}], [{"secondary_y": True}]])
-                    fig_hist.add_trace(go.Scatter(x=df['date'], y=df['close'], name="Close", line=dict(color="blue")), row=1, col=1)
-                    fig_hist.add_trace(go.Bar(x=df['date'], y=df['volume'], name="Volume", marker_color="orange"), row=2, col=1)
-                    fig_hist.add_trace(go.Scatter(x=df['date'], y=df['trades'], name="Trades", line=dict(color="purple")), row=2, col=1, secondary_y=True)
+                    fig_hist = make_subplots(
+                        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.08, row_heights=[0.7, 0.3],
+                        subplot_titles=("Option Premium Price", "Volume & Trade Count"),
+                        specs=[[{"secondary_y": False}], [{"secondary_y": True}]]
+                    )
+                    fig_hist.add_trace(go.Scatter(x=df['date'], y=df['close'], name="Close Price", line=dict(color="blue")), row=1, col=1)
+                    fig_hist.add_trace(go.Bar(x=df['date'], y=df['volume'], name="Daily Volume", marker_color="orange", opacity=0.7), row=2, col=1)
+                    fig_hist.add_trace(go.Scatter(x=df['date'], y=df['trades'], name="Daily Trades", line=dict(color="purple")), row=2, col=1, secondary_y=True)
                     fig_hist.update_layout(height=600, title_text=f"{ticker} — Full History Since Inception")
+                    fig_hist.update_yaxes(title_text="Price ($)", row=1, col=1)
+                    fig_hist.update_yaxes(title_text="Volume", row=2, col=1)
+                    fig_hist.update_yaxes(title_text="Trades", secondary_y=True, row=2, col=1)
                     st.plotly_chart(fig_hist, use_container_width=True)
 
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Analysis error: {e}")
 
 else:
-    st.info("Enter your Polygon API key in the sidebar to unlock everything.")
+    st.info("👈 Enter your Polygon API key in the sidebar to unlock the chain and analysis.")
 
-st.caption("Built with ❤️ • Now with Barchart-style live chain • Deployed on Streamlit Cloud")
+st.caption("Built with ❤️ • Now using official list_snapshot_options_chain • Barchart-style live data")
