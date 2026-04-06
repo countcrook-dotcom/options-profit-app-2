@@ -9,14 +9,14 @@ from scipy.stats import norm
 
 st.set_page_config(page_title="Options Profit + Trends App", layout="wide")
 st.title("🚀 Options Profit Calculator + Inception Trends + Barchart-Style Chain")
-st.markdown("**100% Free • Rate-limit protected • Click any option for instant charts**")
+st.markdown("**100% Free • Stable • Click any option → instant charts**")
 
-# ==================== CACHE FUNCTIONS (prevents rate limit) ====================
-@st.cache_data(ttl=300)  # cache for 5 minutes
+# ==================== CACHE (prevents rate limits) ====================
+@st.cache_data(ttl=300)
 def get_ticker_data(ticker_symbol):
     return yf.Ticker(ticker_symbol)
 
-@st.cache_data(ttl=180)  # cache chain for 3 minutes
+@st.cache_data(ttl=180)
 def get_option_chain(ticker_symbol, expiration_str):
     tk = get_ticker_data(ticker_symbol)
     return tk.option_chain(expiration_str)
@@ -34,22 +34,24 @@ with st.sidebar:
     current_price = st.number_input("Current Underlying Price (optional)", value=225.0, step=0.01)
     analyze_btn = st.button("🔥 Analyze Manually", type="primary")
 
-# ==================== MAIN CHAIN BROWSER ====================
+# ==================== BARCHART-STYLE CHAIN ====================
 with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
     st.subheader("Load chain → pick any option → get charts instantly")
     
     chain_underlying = st.text_input("Underlying Ticker", value=underlying, key="chain_underlying")
     
+    tk = None
+    current_stock_price = None
     try:
         tk = get_ticker_data(chain_underlying)
         current_stock_price = tk.fast_info.get('lastPrice', None)
         if current_stock_price:
             st.metric("Current Underlying Stock Price", f"${current_stock_price:.2f}")
     except Exception:
-        current_stock_price = None
-        st.info("⏳ Could not load current price right now (Yahoo is busy) — charts will still work.")
-
-    if tk.options:
+        st.warning("⏳ Could not load ticker data right now (Yahoo is busy). Try again in 30–60 seconds.")
+        st.stop()
+    
+    if tk and tk.options:
         selected_exp_str = st.selectbox("Select Expiration Date", tk.options, key="selected_exp_key")
         
         if st.button("📊 Load Chain for this Expiration"):
@@ -73,8 +75,8 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                     st.session_state.selected_exp_str = selected_exp_str
                     st.session_state.current_stock_price = current_stock_price
                     st.success(f"✅ Loaded {len(df_chain)} contracts")
-                except Exception as e:
-                    st.error(f"Could not load chain right now. Yahoo is rate-limiting. Try again in 30–60 seconds.")
+                except Exception:
+                    st.error("Yahoo rate limit hit. Wait 30–60 seconds and try again.")
         
         if 'df_chain' in st.session_state:
             df_chain = st.session_state.df_chain
@@ -172,4 +174,4 @@ with st.expander("🔍 Barchart-Style Live Options Chain", expanded=True):
                     fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
                     st.plotly_chart(fig_hist, use_container_width=True)
 
-st.caption("✅ Rate-limit protected • Expiration date stays selected • Built with yfinance")
+st.caption("✅ Fixed NameError • Rate-limit protected • Expiration stays selected • Built with yfinance")
