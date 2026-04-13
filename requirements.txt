@@ -3,4 +3,5 @@ pandas
 plotly
 numpy
 yfinance
+polygon-api-client
 scipy
