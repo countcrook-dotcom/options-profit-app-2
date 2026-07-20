@@ -10,7 +10,7 @@ from scipy.stats import norm
 
 st.set_page_config(page_title="Options Profit + Trends App", layout="wide")
 st.title("🚀 Options Profit Calculator + Inception Trends + Barchart-Style Chain")
-st.markdown("**Click any row to analyze** • Global Top 10 with filters • Live prices")
+st.markdown("**Click any row to analyze** • Global Top 10 with filters")
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
@@ -32,14 +32,13 @@ with col_b:
     moneyness_filter = st.selectbox("Moneyness Filter", ["Any", "ITM", "OTM", "0-5% ITM", "5-10% ITM", "10%+ ITM", "0-5% OTM", "5-10% OTM"], key="moneyness_filter")
 
 if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
-    with st.spinner("Scanning across popular tickers..."):
+    with st.spinner("Scanning..."):
         top_options = []
         for ticker in popular_tickers:
             try:
                 tk = yf.Ticker(ticker)
                 current_price = tk.fast_info.get('lastPrice', None)
-                if not current_price or not tk.options:
-                    continue
+                if not current_price or not tk.options: continue
                 exps = tk.options
                 if exp_filter == "Nearest Expiration":
                     exp = exps[0]
@@ -69,8 +68,7 @@ if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
                     iv = row["IV"] if pd.notna(row["IV"]) else 0.30
                     breakeven = selected_strike + premium if selected_type == "CALL" else selected_strike - premium
                     days_to_exp = (datetime.strptime(exp, "%Y-%m-%d").date() - datetime.now().date()).days
-                    if days_to_exp <= 0 or iv <= 0:
-                        continue
+                    if days_to_exp <= 0 or iv <= 0: continue
                     T = days_to_exp / 365.0
                     S = current_price
                     K = breakeven
@@ -78,10 +76,7 @@ if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
                     d2 = (np.log(S / K) - 0.5 * sigma**2 * T) / (sigma * np.sqrt(T)) if K > 0 else 0
                     pop = norm.cdf(d2) * 100 if selected_type == "CALL" else norm.cdf(-d2) * 100
 
-                    if selected_type == "CALL":
-                        moneyness = (selected_strike - current_price) / current_price * 100
-                    else:
-                        moneyness = (current_price - selected_strike) / current_price * 100
+                    moneyness = (selected_strike - current_price) / current_price * 100 if selected_type == "CALL" else (current_price - selected_strike) / current_price * 100
 
                     if moneyness_filter != "Any":
                         if moneyness_filter == "ITM" and moneyness <= 0: continue
@@ -108,9 +103,8 @@ if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
             st.session_state.df_top10 = df_top
             st.success("✅ Top 10 updated!")
         else:
-            st.warning("No options found matching your filters. Try broader settings.")
+            st.warning("No options found. Try different filters.")
 
-# Clickable Top 10 with full graphs
 if 'df_top10' in st.session_state:
     selection_top = st.dataframe(
         st.session_state.df_top10.style.highlight_max(subset=["POP %"], color="#00ff00"),
@@ -169,7 +163,7 @@ if 'df_top10' in st.session_state:
             fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
             st.plotly_chart(fig_hist, use_container_width=True)
 
-# ==================== BARCHART-STYLE LIVE OPTIONS CHAIN ====================
+# ==================== BARCHART-STYLE LIVE OPTIONS CHAIN (FULLY RESTORED) ====================
 with st.expander("📊 Barchart-Style Live Options Chain", expanded=True):
     col_ticker, col_price = st.columns([3, 1])
     with col_ticker:
@@ -353,4 +347,4 @@ with st.expander("📊 Barchart-Style Live Options Chain", expanded=True):
                 fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
                 st.plotly_chart(fig_hist, use_container_width=True)
 
-st.caption("✅ Graphs fixed in Top 10 • Full chain restored • Desktop/Cloud ready")
+st.caption("✅ Full chain picker restored • Global Top 10 graphs fixed • All updates from today included")
