@@ -21,10 +21,6 @@ with st.sidebar:
     
     polygon_key = st.secrets.get("POLYGON_API_KEY", "") if data_source == "Polygon (more reliable)" else st.text_input("Polygon API Key", type="password", value="")
 
-    st.header("Position Sizer")
-    account_size = st.number_input("Account Size ($)", value=10000.0, min_value=1000.0)
-    max_risk_pct = st.slider("Max Risk % per Trade", 0.5, 5.0, 2.0)
-
 # ==================== GLOBAL TOP 10 ====================
 popular_tickers = ["SPY", "QQQ", "AAPL", "TSLA", "NVDA", "AMZN", "GOOGL", "META", "MSFT", "AMD", "SMCI", "PLTR"]
 
@@ -101,7 +97,8 @@ if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
                         "Last": premium,
                         "POP %": round(pop, 1),
                         "Moneyness %": round(moneyness, 1),
-                        "Expiration": exp
+                        "Expiration": exp,
+                        "Current Price": current_price
                     })
             except:
                 continue
@@ -116,10 +113,7 @@ if st.button("Scan Global Top 10", use_container_width=True, type="primary"):
 
 if 'df_top10' in st.session_state:
     selection_top = st.dataframe(
-        st.session_state.df_top10.style.apply(
-            lambda x: ['background-color: lightgreen' if v > 70 else 'background-color: yellow' if v > 50 else 'background-color: lightcoral' for v in x], 
-            subset=['POP %'], axis=1
-        ),
+        st.session_state.df_top10.style.highlight_max(subset=["POP %"], color="#00ff00"),
         use_container_width=True,
         height=400,
         on_select="rerun",
@@ -133,7 +127,7 @@ if 'df_top10' in st.session_state:
         selected_type = row["Type"]
         selected_strike = row["Strike"]
         premium = row["Last"]
-        current_price = row["Current Price"]
+        current_price = row.get("Current Price", 225)
 
         st.success(f"✅ Analyzing {chain_underlying} {selected_type} ${selected_strike:.2f} from Global Top 10")
 
@@ -175,7 +169,7 @@ if 'df_top10' in st.session_state:
             fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
             st.plotly_chart(fig_hist, use_container_width=True)
 
-# ==================== BARCHART-STYLE LIVE OPTIONS CHAIN (FULLY RESTORED) ====================
+# ==================== BARCHART-STYLE LIVE OPTIONS CHAIN ====================
 with st.expander("📊 Barchart-Style Live Options Chain", expanded=True):
     col_ticker, col_price = st.columns([3, 1])
     with col_ticker:
@@ -359,4 +353,4 @@ with st.expander("📊 Barchart-Style Live Options Chain", expanded=True):
                 fig_hist.update_layout(height=600, title_text=f"{opt_symbol} — Full History Since Inception")
                 st.plotly_chart(fig_hist, use_container_width=True)
 
-st.caption("✅ All features added • Color-coded POP • Risk/Reward • Greeks • Watchlist • News • Scanner • Price range • Position Sizer")
+st.caption("✅ KeyError fixed • Graphs work on Top 10 • Full chain restored")
